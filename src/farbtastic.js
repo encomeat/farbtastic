@@ -1,17 +1,24 @@
-// Farbtastic 2.0.0-alpha.1
+// Farbtastic 2.0.0-devel.1
 (function ($) {
 
 var __debug = false;
 
+$.support.canvas = !! document.createElement("canvas").getContext;
+$.support.excanvas = ! $.support.canvas && "G_vmlCanvasManager" in window;
+$.support.farbtastic = $.support.canvas || $.support.excanvas;
+
 $.fn.farbtastic = function (options) {
-  $.farbtastic(this, options);
+  options = options || {};
+  this.each(function(){
+    this.farbtastic = this.farbtastic || new $._farbtastic(this, options);
+  });
   return this;
 };
 
 $.farbtastic = function (container, options) {
-  var container = $(container)[0];
+  container = $(container).get(0);
   return container.farbtastic || (container.farbtastic = new $._farbtastic(container, options));
-}
+};
 
 $._farbtastic = function (container, options) {
   var fb = this;
@@ -19,12 +26,37 @@ $._farbtastic = function (container, options) {
   /////////////////////////////////////////////////////
 
   /**
+   * Defaults for options
+   */
+  fb.defaults = {
+    width: 300,
+    wheelWidth: (options.width || 300) / 10,
+    callback: null,
+    color: "#808080"
+  };
+
+  fb._initialized = false;
+  fb.$container = $(container);
+  fb.EVENT_CHANGE = "farbtastic.change";
+
+  /**
+   * Event Fetures
+   */
+  fb.emitter = $(fb);
+  $.each(["on", "off", "trigger"], function(i, name){
+    fb[name] = function(){
+      this.emitter[name].apply(this.emitter, arguments);
+      return this;
+    };
+  });
+
+  /**
    * Link to the given element(s) or callback.
    */
   fb.linkTo = function (callback) {
     // Unbind previous nodes
     if (typeof fb.callback == 'object') {
-      $(fb.callback).unbind('keyup', fb.updateValue);
+      $(fb.callback).off('keyup', fb.updateValue);
     }
 
     // Reset color
@@ -36,7 +68,7 @@ $._farbtastic = function (container, options) {
     }
     else if (typeof callback == 'object' || typeof callback == 'string') {
       fb.callback = $(callback);
-      fb.callback.bind('keyup', fb.updateValue);
+      fb.callback.on('keyup', fb.updateValue);
       if (fb.callback[0].value) {
         fb.setColor(fb.callback[0].value);
       }
@@ -98,18 +130,20 @@ $._farbtastic = function (container, options) {
       .find('div>*').css('position', 'absolute');
 
     // IE Fix: Recreate canvas elements with doc.createElement and excanvas.
-    $.browser.msie || false && $('canvas', container).each(function () {
-      // Fetch info.
-      var attr = { 'class': $(this).attr('class'), style: this.getAttribute('style') },
-          e = document.createElement('canvas');
-      // Replace element.
-      $(this).before($(e).attr(attr)).remove();
-      // Init with explorerCanvas.
-      G_vmlCanvasManager && G_vmlCanvasManager.initElement(e);
-      // Set explorerCanvas elements dimensions and absolute positioning.
-      $(e).attr(dim).css(dim).css('position', 'absolute')
-        .find('*').attr(dim).css(dim);
-    });
+    if(! document.createElement("canvas").getContext && !! G_vmlCanvasManager){
+      $('canvas', container).each(function () {
+        // Fetch info.
+        var attr = { 'class': $(this).attr('class'), style: this.getAttribute('style') },
+            e = document.createElement('canvas');
+        // Replace element.
+        $(this).before($(e).attr(attr)).remove();
+        // Init with explorerCanvas.
+        G_vmlCanvasManager && G_vmlCanvasManager.initElement(e);
+        // Set explorerCanvas elements dimensions and absolute positioning.
+        $(e).attr(dim).css(dim).css('position', 'absolute')
+          .find('*').attr(dim).css(dim);
+      });
+    }
 
     // Determine layout
     fb.radius = (options.width - options.wheelWidth) / 2 - 1;
@@ -166,7 +200,7 @@ $._farbtastic = function (container, options) {
           // New color
           color2 = fb.pack(fb.HSLToRGB([d2, 1, 0.5]));
       if (i > 0) {
-        if ($.browser.msie || false) {
+        if ($.support.excanvas){
           // IE's gradient calculations mess up the colors. Correct along the diagonals.
           var corr = (1 + Math.min(Math.abs(Math.tan(angle1)), Math.abs(Math.tan(Math.PI / 2 - angle1)))) / n;
           color1 = fb.pack(fb.HSLToRGB([d1 - 0.15 * corr, 1, 0.5]));
@@ -246,7 +280,7 @@ $._farbtastic = function (container, options) {
       fb.ctxMask.drawImage(buffer, 0, 0, sz + 1, sz + 1, -sq, -sq, sq * 2, sq * 2);
     }
     // Method #2: drawing commands (old Canvas).
-    else if (!($.browser.msie || false)) {
+    else if (! $.support.excanvas) {
       // Render directly at half-resolution
       var sz = Math.floor(size / 2);
       calculateMask(sz, sz, function (x, y, c, a) {
@@ -354,6 +388,10 @@ $._farbtastic = function (container, options) {
     else if (typeof fb.callback == 'function') {
       fb.callback.call(fb, fb.color);
     }
+    if(fb._initialized){
+      fb.$container.trigger(fb.EVENT_CHANGE, fb.color);
+      fb.trigger(fb.EVENT_CHANGE, fb.color);
+    }
   }
 
   /**
@@ -372,7 +410,7 @@ $._farbtastic = function (container, options) {
   fb.mousedown = function (event) {
     // Capture mouse
     if (!$._farbtastic.dragging) {
-      $(document).bind('mousemove', fb.mousemove).bind('mouseup', fb.mouseup);
+      $(document).on('mousemove', fb.mousemove).on('mouseup', fb.mouseup);
       $._farbtastic.dragging = true;
     }
 
@@ -413,8 +451,8 @@ $._farbtastic = function (container, options) {
    */
   fb.mouseup = function () {
     // Uncapture mouse
-    $(document).unbind('mousemove', fb.mousemove);
-    $(document).unbind('mouseup', fb.mouseup);
+    $(document).off('mousemove', fb.mousemove);
+    $(document).off('mouseup', fb.mouseup);
     $._farbtastic.dragging = false;
   }
 
@@ -490,14 +528,10 @@ $._farbtastic = function (container, options) {
   };
 
   // Parse options.
-  if (!options.callback) {
-    options = { callback: options };
+  if(["string", "function"].indexOf($.type(options)) >= 0){
+    options = {callback: options};
   }
-  options = $.extend({
-    width: 300,
-    wheelWidth: (options.width || 300) / 10,
-    callback: null
-  }, options);
+  options = $.extend(fb.defaults, options);
 
   // Initialize.
   fb.initWidget();
@@ -510,7 +544,11 @@ $._farbtastic = function (container, options) {
     fb.linkTo(options.callback);
   }
   // Set to gray.
-  if (!fb.color) fb.setColor('#808080');
+  if (!fb.color){
+    fb.setColor(options.color);
+  }
+
+  fb._initialized = true;
 }
 
 })(jQuery);
