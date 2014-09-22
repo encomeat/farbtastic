@@ -1,4 +1,4 @@
-// Farbtastic 2.0.0-devel.1
+// Farbtastic 2.0.0-compatibility-1
 (function ($) {
 
 var __debug = false;

@@ -6,7 +6,7 @@
     },
     "name": "farbtastic",
     "description": "jQuery Color Wheel",
-    "version": "2.0.0-alpha.1",
+    "version": "2.0.0-compatibility.1",
     "keywords": [
         "jquery"
     ],
